@@ -211,6 +211,23 @@ new Vue({
 })
 ```
 
+And viola, you're running a Vue.js app as a browser extension!
+
+## Bonus: How come I've never had to do that render function thing?
+
+You might be using vue.runtime.* if you load vue from script tags.
+
+It's more likely that you started a project with a tool like `vue-cli init`, the `webpack.conf` it creates contains the following section that aliases the full build rather than the runtime-only build you get by default with `import Vue from 'vue'`
+
+```JavaScript
+resolve: {
+    alias: {
+        'vue$': 'vue/dist/vue.esm.js'
+    },
+    extensions: ['*', '.js', '.vue', '.json']
+},
+```
+
 ## Other problems
 
 1. Expensive(ish) source maps.  As with before, we cannot use `eval` in our source maps.  According to https://webpack.js.org/configuration/devtool/ `cheap-source-map` is the best we can do.

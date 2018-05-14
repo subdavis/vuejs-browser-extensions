@@ -10,6 +10,12 @@ module.exports = {
         path: path.resolve(__dirname, './build'),
         filename: '[name].build.js'
     },
+    // resolve: {
+    //     alias: {
+    //         'vue$': 'vue/dist/vue.esm.js'
+    //     },
+    //     extensions: ['*', '.js', '.vue', '.json']
+    // },
     module: {
         rules: [{
             test: /\.vue$/,
