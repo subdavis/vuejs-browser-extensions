@@ -2,18 +2,16 @@
 
 What to keep in mind if you want to use Vue.js for a WebExtension
 
+## Anatomy of a browser extension
 
-# What is a browser extension?
+Browser extensions consist of 4 parts, which are mostly just regular web apps.
 
-Like a regular web application:
+* Popup page - the main application (restricted)
+* Options page - a config page (restricted)
+* Background page - an invisible tab that runs as long as your browser is open (restricted, no frontend)
+* Inject script(s) - scripts that can be optionally or automatically run within the context of any website you visit. (unrestricted)
 
-* 4 applications in 1:
-  * Popup page - the main application
-  * Options page - a config page
-  * Background page - an invisible tab that runs as long as your browser is open
-  * Inject script(s) - scripts that can be optionally or automatically run within the context of any website you visit.
-
-But with some restrictions:
+The first three parts have some restrictions:
 
 * Content Security Policy defaults to `script-src 'self'; object-src 'self'`
 * `eval` (and friends) won't work (ooh... ahh...)
@@ -21,7 +19,7 @@ But with some restrictions:
 
 More details at https://developer.chrome.com/extensions/contentSecurityPolicy
 
-...and some superpowers:
+...and some superpowers.  For example:
 
 * they can inject code and assets into any page you visit.
 * they can interact with some system hardware, like USB devices.
@@ -29,43 +27,32 @@ More details at https://developer.chrome.com/extensions/contentSecurityPolicy
 
 MANY more details at https://developer.chrome.com/extensions/api_index
 
+## Can we get around these restrictions?
 
-# Can we get around these restrictions?
+The answer is *Yes, but don't*.
 
-The answer, in my opinion, is *Yes, but never do it*.
-
-The three laws of a secure WebExtension:
+Asimov's three laws of a secure WebExtension:
 
 * Use the default CSP or a stricter one.
-* Minimize third party library use and do not distribute any un-used code
-* Simplify your development experience, as long as this simplicity does not conflict with the first and second laws.
+* Minimize third party library use and do not distribute unused code.
+* Simplify the development experience, as long as this simplicity does not conflict with the first and second laws.
 
-# How can we build a Three Laws safe extension in Vue?
+# Building a three-laws-safe WebExtension
 
 We have to pick a "stack".  Here's mine:
 
 * Webpack + Yarn
 * Vue.js & vue-loader
 * SASS & sass-loader
-* mocha + should.js for tests (we won't cover this much)
+* mocha + should.js for tests (we won't cover this)
 
 # `vue-cli init webpack new-extension`
 
 If you approach extension dev like a normal web app, the first issue you're going to run into is `http://localhost:8080`.
 
-For extensions, the browser itself must serve the files.
+Per the CSP, the browser itself must serve the files - `http://localhost:8080` is a remote origin.
 
-**You cannot use a normal development server like webpack-dev-server**
-
-So hot-reload must be out then right?
-
-# Problem 0 - Hot Reloading
-
-[Webpack Chrome Extension Loader](https://github.com/rubenspgcavalcante/webpack-chrome-extension-reloader) is a brilliant middleware that translates WebSocket reload notifications to `chrome.runtime` events that your extension can listen to.
-
-Runtime is the browser's pub-sub interface that allows the different parts of an extension to talk to eachother. 
-
-An example of this can be found in `example1_reload`
+**You cannot use a normal development flow like webpack-dev-server**
 
 # Problem 1 - Unsafe Eval
 
@@ -73,7 +60,7 @@ Use the un-minified development version of `Vue.js` from https://github.com/vuej
 
 The browser immediately tells us what's wrong:
 
-```
+```html
 Error compiling template:
 
 <div id="elm">
@@ -105,8 +92,8 @@ function createFunction (code, errors) {
 
 Setting a breakpoint reveals the `code` arg (broken into lines for readability):
 
-```
-"with(this){
+```JavaScript
+with(this){
 	return _c(
 		'div',{
 		attrs:{
@@ -117,10 +104,10 @@ Setting a breakpoint reveals the `code` arg (broken into lines for readability):
 			_c('h1',[_v(_s(msg))])
 		]
 	)
-}"
+}
 ```
 
-# Some solutions to the eval problem:
+# Some solutions to the eval problem
 
 Here I'll borrow from [a great article on the subject](https://vuejsdevelopers.com/2017/05/08/vue-js-chrome-extension/)
 
@@ -135,7 +122,7 @@ You can avoid invoking the template compiler by writing your own render function
 
 > Vue recommends using templates to build your HTML in the vast majority of cases. There are situations however, where you really need the full programmatic power of JavaScript. That’s where you can use the render function, a closer-to-the-compiler alternative to templates.
 
-Render functions are impractical for writing your entire application.  
+Render functions are impractical for writing your entire application.
 
 ```JavaScript
 // An example render function
@@ -143,9 +130,9 @@ Render functions are impractical for writing your entire application.
 
 render: function (createElement) {
   return createElement(
-  	'h1', 						// the element to creat,
-  	{},						    // A data object corresponding to the attributess
-  	[ this.blogTitle ] 			// the list of children to populate this new element
+    s'h1', 			            // the element to creat,
+    {},						          // A data object corresponding to the attributess
+    [ this.blogTitle ] 			// the list of children to populate this new element
   )
 }
 ```
@@ -156,12 +143,82 @@ You'll notice this is exactly the same as the `code` argument from above.  The t
 
 > When you use vue-loader to process your .vue file, one of the things it does is use vue-template-compiler to turn your component’s template into a render function.
 
+For this we need.... Webpack!  (and babel and vue-loader)
 
+After some more involved setup (see Example 2) we have:
 
-# Problem - Expensive(ish) source maps
+```plaintext
+.
+├── build
+│  └── index.build.js
+├── index.html
+├── index.js
+├── manifest.json
+├── package.json
+├── Popup.vue
+├── vue.js
+├── webpack.config.js
+├── yarn-error.log
+└── yarn.lock
+```
 
-As with before, we cannot use `eval` in our source maps.
+The important parts are:
 
-According to https://webpack.js.org/configuration/devtool/ `cheap-source-map` is the best we can do.  
+```JavaScript
+// index.html:
 
-It's rated as "medium" for rebuilds, over the "super fast" and "pretty fast" options where eval is allowed.
+<div id="app">
+    <popup></popup>
+</div>
+<script src="build/index.build.js"></script>
+
+// index.js:
+
+import Popup from './Popup.vue'
+import Vue from 'vue';
+
+new Vue({
+    el: "#app",
+    components: {
+        Popup
+    }
+})
+
+// Popup.vue is boundary of wierdness, where all your current Vue code will work normally.
+```
+
+Loading `/path/to/index.html` as a static file produces a blank page.  In console, you can see:
+
+```
+[Vue warn]: You are using the runtime-only build of Vue where the template compiler is not available. Either pre-compile the templates into render functions, or use the compiler-included build.
+```
+
+While there are no templates to explicitly cause `new Function(stringn)` to be executed, vue wants to run `<div id="app"></div>` from `index.html` through the template loader and cannot find it.
+
+We have 2 options:
+
+1. Provide `vue-template-loader` in the webpack bundle (not ideal, since this is superfluous code that won't ever execute)
+2. Use a render function for the top-level template so `vue-template-loader` is never needed (better!)
+
+`index.js` becomes:
+
+```JavaScript
+import Popup from './Popup.vue'
+import Vue from 'vue'
+new Vue({
+    el: "#app",
+    render: createElement => createElement(Popup)
+})
+```
+
+## Other problems
+
+1. Expensive(ish) source maps.  As with before, we cannot use `eval` in our source maps.  According to https://webpack.js.org/configuration/devtool/ `cheap-source-map` is the best we can do.
+2. Long initial build times.  Avoid building static assets, and try `DLLPlugin` for webpack.
+3. Hot Reload is tricky but not impossible.  [Webpack Chrome Extension Loader](https://github.com/rubenspgcavalcante/webpack-chrome-extension-reloader) is brilliant middleware that translates WebSocket reload notifications to `chrome.runtime` events that your extension can listen to.
+
+## A real example
+
+`example2_sfc` is great for understanding the basic setup.
+
+[My browser extension, Tusk](https://github.com/subdavis/Tusk) will provide guidance for the gritty details, such as handling static resources and using `DLLPlugin`.  It's also a decent example of how to organize a large browser extension project with Vue.js
