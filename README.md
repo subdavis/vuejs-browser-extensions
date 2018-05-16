@@ -6,7 +6,7 @@ What to keep in mind if you want to use Vue.js for a WebExtension
 
 Browser extensions consist of 4 parts which are mostly just regular web apps:
 
-* Popup page - the main application (restricted.
+* Popup page - the main application (restricted)
 * Options page - a config page (restricted)
 * Background page - an invisible tab that runs as long as your browser is open (restricted, no frontend)
 * Inject script(s) - scripts that can be optionally or automatically run within the context of any website you visit. (unrestricted)
@@ -31,20 +31,21 @@ MANY more details: https://developer.chrome.com/extensions/api_index
 
 The answer is *Yes, but don't*.
 
-The three laws of a secure WebExtension:
+Because extensions have invasive access to modify browser behavior, XSS attacks are a greater threat than they would be in a regular browser tab.
 
-* Use the default CSP or a stricter one.
-* Minimize third party library use and do not distribute unused code.
-* Simplify the development experience, as long as this simplicity does not conflict with the first and second laws.
+For perspective, because electron has a node.js runtime, XSS attacks can directly impact your operating system.  Here's [A recent electron CVE](https://www.trustwave.com/Resources/SpiderLabs-Blog/CVE-2018-1000136---Electron-nodeIntegration-Bypass/) that demonstrates how XSS could result in Remote code execution (RCE).
 
-## Building a three-laws-safe WebExtension
+## Security best practices
 
-We have to pick a "stack".  Here's mine:
+* Use the default CSP
+* Minimize third party library use
+* Avoid distributing un-invoked code
 
-* Webpack + Yarn
+We also have to pick a "stack".  Here's mine:
+
+* Webpack & Yarn/NPM
 * Vue.js & vue-loader
 * SASS & sass-loader
-* mocha + should.js for tests (we won't cover this)
 
 ## Pitfalls: vue-cli
 
@@ -55,8 +56,6 @@ This will result in:
 * A rat's nest of Webpack config you don't need
 * A dependency list heavier than a neutron star
 * A development server on `http://localhost:8080` we can't do anthing with.
-
-**You cannot use a normal development flow like webpack-dev-server**
 
 ## A from-scratch approach
 
@@ -237,16 +236,15 @@ Loading `/path/to/index.html` as a static file produces a broken page.  In conso
 
 It turns out that `import Vue from 'vue'` grabs a runtime-only build by default.  While there are no templates to explicitly cause `new Function(stringn)` to be executed, vue wants to run `<div id="app">...</div>` from `index.html` through the compiler and cannot find it.
 
-We have 2 options:
+Even if the compiler were present, we would be right back to the `eval` problem.
 
-1. Provide `vue-template-loader` in the webpack bundle (not ideal, since it would require shipping superfluous code, but this time it would work)
-2. Use a render function for  *only*  the top-level template so `vue-template-loader` is never needed (better!)
+**Solution**: Use a render function for *only* the top-level template so `vue-template-loader` is never needed.
 
 `index.js` becomes:
 
 ```JavaScript
 import Popup from './Popup.vue' /* compiled by webpack */
-import Vue from 'vue' /* runtime only */
+import Vue from 'vue'           /* runtime only */
 new Vue({
     el: "#app", 
     render: createElement => createElement(Popup)
@@ -254,6 +252,21 @@ new Vue({
 ```
 
 Viola, you're running a Vue.js app as a browser extension!
+
+## So how do I set up my development environment?
+
+We can't use a development server, and we need to load fully compiled static assets from disk.
+
+`webpack --watch` is perfect for us because during development, the browser fetches all assets from disk every time the application is opened.  For example, when you click the Popup icon, all necessary files are fetched directly from disk.
+
+[Webpack Watch docs](https://webpack.js.org/configuration/watch/)
+
+`webpack --watch` is *very* fast because it only re-compiles the files that change.  The rest of the compilation is kept in process memory.
+
+Your development flow is now as easy as:
+
+1. Make a code change.
+2. Reload the popup (or options) window.  I do this with `window.location.reload()` in the debug console.
 
 ## How come I've never had to do that render function jazz?
 

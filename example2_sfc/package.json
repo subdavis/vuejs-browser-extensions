@@ -4,7 +4,8 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "build": "webpack --progress --config webpack.config.js"
+    "build": "webpack --progress --config webpack.config.js",
+    "dev": "webpack --watch --config webpack.config.js"
   },
   "dependencies": {
     "babel-regenerator-runtime": "^6.5.0",
